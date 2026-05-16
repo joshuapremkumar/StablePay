@@ -1,0 +1,252 @@
+version: "3.9"
+
+name: stablepay
+
+services:
+  # --- API Gateway ---
+  api-gateway:
+    build:
+      context: ../backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: stablepay-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - JWT_SECRET=${JWT_SECRET}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL}
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Auth Service ---
+  auth-service:
+    build:
+      context: ../backend/services/auth
+      dockerfile: Dockerfile
+    container_name: stablepay-auth
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Treasury Service ---
+  treasury-service:
+    build:
+      context: ../backend/services/treasury
+      dockerfile: Dockerfile
+    container_name: stablepay-treasury
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Payments Service ---
+  payments-service:
+    build:
+      context: ../backend/services/payments
+      dockerfile: Dockerfile
+    container_name: stablepay-payments
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL}
+      - CONTRACT_DEPLOYER_PRIVATE_KEY=${CONTRACT_DEPLOYER_PRIVATE_KEY}
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Trade Finance Service ---
+  trade-service:
+    build:
+      context: ../backend/services/trade
+      dockerfile: Dockerfile
+    container_name: stablepay-trade
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Compliance Service ---
+  compliance-service:
+    build:
+      context: ../backend/services/compliance
+      dockerfile: Dockerfile
+    container_name: stablepay-compliance
+    ports:
+      - "8005:8005"
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - stablepay-network
+
+  # --- Scoring Service (AI/ML) ---
+  scoring-service:
+    build:
+      context: ../backend/services/scoring
+      dockerfile: Dockerfile
+    container_name: stablepay-scoring
+    ports:
+      - "8006:8006"
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Integrations Service ---
+  integrations-service:
+    build:
+      context: ../backend/services/integrations
+      dockerfile: Dockerfile
+    container_name: stablepay-integrations
+    ports:
+      - "8007:8007"
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Postgres ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: stablepay-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: stablepay
+      POSTGRES_PASSWORD: stablepay
+      POSTGRES_DB: stablepay
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../backend/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stablepay"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stablepay-network
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: stablepay-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stablepay-network
+
+  # --- Celery Worker ---
+  celery-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.celery
+    container_name: stablepay-celery
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - stablepay-network
+
+  # --- Frontend (Next.js) ---
+  frontend:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+    container_name: stablepay-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}
+    env_file:
+      - ../.env
+    depends_on:
+      - api-gateway
+    networks:
+      - stablepay-network
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  stablepay-network:
+    driver: bridge

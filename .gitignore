@@ -1,0 +1,75 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+*.pkl
+*.joblib
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+.cache/
+*.tsbuildinfo
+.codex-tmp/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+coverage/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Docker
+docker-compose.override.yml
+
+# Blockchain
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain-types/
+blockchain/.openzeppelin/
+
+# Database
+backend/migrations/versions/
+
+# AI
+ai/models/*.pkl
+ai/models/*.joblib
+ai/data/raw/
+ai/data/processed/
+
+# Secrets
+**/secrets/
+**/credentials/
+*.pem
+*.key
+*.cert
