@@ -18,4 +18,4 @@ COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 ENV PORT=3000
-CMD ["npm", "run", "start"]
+CMD ["npx", "serve", "-s", "dist/client", "-l", "3000"]
