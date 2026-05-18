@@ -1,56 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import {
-  ArrowRight,
-  Banknote,
-  Bot,
-  CheckCircle2,
-  CreditCard,
-  Globe2,
-  Layers,
-  Lock,
-  Network,
-  Ship,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Finara OS — The Financial Operating System for Modern SMEs" },
-      {
-        name: "description",
-        content:
-          "Payments, treasury, supplier management, trade finance, and an AI CFO Copilot — unified in one corporate financial operating system.",
-      },
-      { property: "og:title", content: "Finara OS — Financial OS for Modern SMEs" },
-      {
-        property: "og:description",
-        content: "Smarter Treasury. Faster Settlement. Payments, treasury, and trade — unified.",
-      },
-    ],
-  }),
-  component: Landing,
+  component: () => <Navigate to="/dashboard" />,
 });
-
-function Landing() {
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Nav />
-      <Hero />
-      <TrustBar />
-      <Pillars />
-      <Architecture />
-      <UseCases />
-      <Compliance />
-      <Cta />
-      <Footer />
-    </div>
-  );
-}
 
 function Nav() {
   return (
