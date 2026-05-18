@@ -1,33 +1,58 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KpiCard, PageHeader, SectionCard } from "@/components/finara/Primitives";
 import { AllocationDonut, CashFlowChart } from "@/components/finara/Charts";
-import { allocation, cashflow, currencyBalances, formatMoney, kpis } from "@/lib/mock";
+import { formatMoney } from "@/lib/mock";
+import { demoApi } from "@/lib/demo";
 import { Button } from "@/components/ui/button";
 import { ArrowRightLeft, TrendingUp, Wallet, Coins, DollarSign } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/treasury")({
-  head: () => ({ meta: [{ title: "Treasury & Financial Ops · Finara OS" }] }),
+  head: () => ({ meta: [{ title: "Treasury & Financial Ops - Finara OS" }] }),
   component: Treasury,
 });
 
 function Treasury() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["demo", "treasury"],
+    queryFn: demoApi.getTreasury,
+  });
+
+  const payout = useMutation({
+    mutationFn: demoApi.createPayout,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["demo"] });
+      toast.success("Simulated a treasury payout and updated balances.");
+    },
+  });
+
+  if (isLoading) {
+    return <div className="p-6 md:p-8">Loading treasury simulation...</div>;
+  }
+
+  if (error || !data) {
+    return <div className="p-6 md:p-8">Unable to load the treasury simulation.</div>;
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
       <PageHeader
         title="Treasury & Financial Ops"
         description="Multi-currency balances, allocation, and forecasting across the corporate treasury."
         actions={
-          <Button size="sm">
+          <Button size="sm" onClick={() => payout.mutate()}>
             <ArrowRightLeft className="h-4 w-4 mr-1.5" /> New transfer
           </Button>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {currencyBalances.map((c) => (
+        {data.currencyBalances.map((c) => (
           <KpiCard
             key={c.code}
-            label={`${c.code} · ${c.label}`}
+            label={`${c.code} / ${c.label}`}
             value={formatMoney(c.balance, c.code)}
             delta={c.change}
             icon={c.code === "USDC" ? Coins : c.code === "USD" ? DollarSign : Wallet}
@@ -37,15 +62,15 @@ function Treasury() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <SectionCard title="Cash position" description="90-day rolling" className="lg:col-span-2">
-          <CashFlowChart data={cashflow} />
+          <CashFlowChart data={data.cashflow} />
         </SectionCard>
         <SectionCard title="Allocation" description="By account">
-          <AllocationDonut data={allocation} />
+          <AllocationDonut data={data.allocation} />
         </SectionCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <SectionCard title="Stablecoin ↔ Fiat" description="On-demand corporate conversion">
+        <SectionCard title="Stablecoin to fiat" description="On-demand corporate conversion">
           <div className="space-y-3">
             <div className="rounded-lg border border-border bg-surface-elevated p-3">
               <div className="text-[11px] text-muted-foreground">From</div>
@@ -86,7 +111,9 @@ function Treasury() {
               <span>Rate 1 USDC = 3.6725 AED</span>
               <span>Fee 0.18%</span>
             </div>
-            <Button className="w-full">Confirm conversion</Button>
+            <Button className="w-full" onClick={() => payout.mutate()}>
+              Confirm conversion
+            </Button>
           </div>
         </SectionCard>
 
@@ -97,16 +124,11 @@ function Treasury() {
                 Outstanding
               </div>
               <div className="font-display text-2xl font-semibold tabular mt-1">
-                {formatMoney(kpis.payables30d, "AED")}
+                {formatMoney(data.payables30d, "AED")}
               </div>
             </div>
             <div className="space-y-2">
-              {[
-                { label: "Logistics", pct: 38 },
-                { label: "Components", pct: 28 },
-                { label: "SaaS & Cloud", pct: 14 },
-                { label: "Distribution", pct: 20 },
-              ].map((r) => (
+              {data.payablesBreakdown.map((r) => (
                 <div key={r.label}>
                   <div className="flex justify-between text-xs">
                     <span>{r.label}</span>
@@ -128,25 +150,33 @@ function Treasury() {
                 Total payroll
               </div>
               <div className="font-display text-2xl font-semibold tabular mt-1">
-                {formatMoney(842_400, "AED")}
+                {formatMoney(data.payroll.total, "AED")}
               </div>
-              <div className="text-[11px] text-muted-foreground">42 employees · runs May 25</div>
+              <div className="text-[11px] text-muted-foreground">
+                {data.payroll.employees} employees / runs {data.payroll.runDate}
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-md border border-border p-2">
                 <div className="text-[10px] text-muted-foreground">Salaries</div>
-                <div className="text-sm font-medium tabular">724K</div>
+                <div className="text-sm font-medium tabular">
+                  {Math.round(data.payroll.salaries / 1000)}K
+                </div>
               </div>
               <div className="rounded-md border border-border p-2">
                 <div className="text-[10px] text-muted-foreground">Bonuses</div>
-                <div className="text-sm font-medium tabular">82K</div>
+                <div className="text-sm font-medium tabular">
+                  {Math.round(data.payroll.bonuses / 1000)}K
+                </div>
               </div>
               <div className="rounded-md border border-border p-2">
                 <div className="text-[10px] text-muted-foreground">EOSB</div>
-                <div className="text-sm font-medium tabular">36K</div>
+                <div className="text-sm font-medium tabular">
+                  {Math.round(data.payroll.eosb / 1000)}K
+                </div>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="w-full">
+            <Button variant="outline" size="sm" className="w-full" onClick={() => payout.mutate()}>
               Review payroll
             </Button>
           </div>
@@ -158,21 +188,17 @@ function Treasury() {
         description="AI-projected positions across the next 30 / 60 / 90 days"
       >
         <div className="grid md:grid-cols-3 gap-4">
-          {[
-            { h: "30 days", v: 11_240_000, d: -0.041, note: "Below current — payroll + AP cycle" },
-            { h: "60 days", v: 12_980_000, d: 0.042, note: "Receivables Q2 net positive" },
-            { h: "90 days", v: 14_120_000, d: 0.131, note: "Trade financing inflow expected" },
-          ].map((f) => (
-            <div key={f.h} className="rounded-lg border border-border bg-surface-elevated p-4">
+          {data.forecast.map((f) => (
+            <div key={f.horizon} className="rounded-lg border border-border bg-surface-elevated p-4">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground uppercase tracking-wider">
-                <span>{f.h}</span>
+                <span>{f.horizon}</span>
                 <TrendingUp className="h-3.5 w-3.5" />
               </div>
               <div className="font-display text-xl font-semibold tabular mt-2">
-                {formatMoney(f.v, "AED")}
+                {formatMoney(f.value, "AED")}
               </div>
-              <div className={`text-[11px] mt-1 ${f.d >= 0 ? "text-success" : "text-destructive"}`}>
-                {(f.d * 100).toFixed(1)}% vs today
+              <div className={`text-[11px] mt-1 ${f.delta >= 0 ? "text-success" : "text-destructive"}`}>
+                {(f.delta * 100).toFixed(1)}% vs today
               </div>
               <div className="text-[11px] text-muted-foreground mt-2">{f.note}</div>
             </div>

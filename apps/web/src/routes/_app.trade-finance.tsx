@@ -1,48 +1,57 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KpiCard, PageHeader, SectionCard, StatusPill } from "@/components/finara/Primitives";
-import { formatMoney, kpis, locs, receivables, shipmentMilestones } from "@/lib/mock";
+import { formatMoney } from "@/lib/mock";
+import { demoApi } from "@/lib/demo";
 import { Button } from "@/components/ui/button";
 import { Ship, FileSignature, TrendingUp, Anchor, Plus, Check } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/trade-finance")({
-  head: () => ({ meta: [{ title: "Trade Finance · Finara OS" }] }),
+  head: () => ({ meta: [{ title: "Trade Finance - Finara OS" }] }),
   component: TradeFinance,
 });
 
 function TradeFinance() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["demo", "trade"],
+    queryFn: demoApi.getTrade,
+  });
+
+  const financing = useMutation({
+    mutationFn: demoApi.requestFinancing,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["demo"] });
+      toast.success("Simulated a funded trade finance request.");
+    },
+  });
+
+  if (isLoading) {
+    return <div className="p-6 md:p-8">Loading trade finance simulation...</div>;
+  }
+
+  if (error || !data) {
+    return <div className="p-6 md:p-8">Unable to load the trade finance simulation.</div>;
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
       <PageHeader
         title="Trade Finance Engine"
         description="Tokenized receivables, smart letters of credit, and financing for cross-border trade."
         actions={
-          <Button size="sm">
+          <Button size="sm" onClick={() => financing.mutate()}>
             <Plus className="h-4 w-4 mr-1.5" /> Request financing
           </Button>
         }
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          label="Trade score"
-          value={`${kpis.tradeScore} / 100`}
-          delta={0.04}
-          icon={TrendingUp}
-          hint="Excellent"
-        />
-        <KpiCard
-          label="Active LoCs"
-          value="3"
-          icon={FileSignature}
-          hint={`${formatMoney(672_000, "USD")} notional`}
-        />
-        <KpiCard
-          label="Listed receivables"
-          value={formatMoney(668_000, "AED")}
-          delta={0.06}
-          icon={Anchor}
-        />
-        <KpiCard label="In-transit shipments" value="2" icon={Ship} hint="Avg ETA 14 days" />
+        <KpiCard label="Trade score" value={`${data.kpis.tradeScore} / 100`} delta={0.04} icon={TrendingUp} hint="Excellent" />
+        <KpiCard label="Active LoCs" value={`${data.kpis.activeLocs}`} icon={FileSignature} hint={`${formatMoney(data.kpis.activeLocNotional, "USD")} notional`} />
+        <KpiCard label="Listed receivables" value={formatMoney(data.kpis.listedReceivables, "AED")} delta={0.06} icon={Anchor} />
+        <KpiCard label="In-transit shipments" value={`${data.kpis.inTransit}`} icon={Ship} hint="Avg ETA 14 days" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -52,7 +61,7 @@ function TradeFinance() {
           className="lg:col-span-2"
         >
           <div className="space-y-3">
-            {locs.map((l) => (
+            {data.locs.map((l) => (
               <div key={l.id} className="rounded-lg border border-border bg-surface-elevated p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -71,29 +80,19 @@ function TradeFinance() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between">
-                  {shipmentMilestones.map((m, i) => {
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  {data.shipmentMilestones.map((m, i) => {
                     const reached = i < l.milestone;
                     return (
-                      <div key={m.label} className="flex-1 flex flex-col items-center">
+                      <div key={m.label} className="flex flex-col items-center">
                         <div
                           className={`h-6 w-6 rounded-full grid place-items-center border ${reached ? "bg-primary border-primary text-primary-foreground" : "bg-surface border-border text-muted-foreground"}`}
                         >
-                          {reached ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <span className="text-[10px]">{i + 1}</span>
-                          )}
+                          {reached ? <Check className="h-3 w-3" /> : <span className="text-[10px]">{i + 1}</span>}
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-1.5 text-center">
                           {m.label}
                         </div>
-                        {i < shipmentMilestones.length - 1 && (
-                          <div
-                            className={`hidden md:block absolute h-px w-12 mt-3 ${reached ? "bg-primary" : "bg-border"}`}
-                            style={{ marginLeft: 48 }}
-                          />
-                        )}
                       </div>
                     );
                   })}
@@ -108,8 +107,11 @@ function TradeFinance() {
             <div>
               <label className="text-xs text-muted-foreground">Receivable</label>
               <select className="mt-1 w-full h-9 px-2 rounded-md border border-border bg-surface-elevated text-sm">
-                <option>RCV-220 · Carrefour MENA · 480,000 AED</option>
-                <option>RCV-222 · Migros Turkey · 188,000 USD</option>
+                {data.receivables.map((r) => (
+                  <option key={r.id}>
+                    {r.id} / {r.buyer} / {formatMoney(r.amount, r.currency)}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -122,26 +124,25 @@ function TradeFinance() {
             <div className="rounded-lg border border-border bg-surface-elevated p-3 space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Advance</span>
-                <span className="tabular font-medium">{formatMoney(408_000, "AED")}</span>
+                <span className="tabular font-medium">{formatMoney(data.financingPreview.advance, "AED")}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Discount (60d, 7.2% APR)</span>
-                <span className="tabular">{formatMoney(4_896, "AED")}</span>
+                <span className="tabular">{formatMoney(data.financingPreview.discount, "AED")}</span>
               </div>
               <div className="flex justify-between text-sm pt-2 border-t border-border">
                 <span className="font-medium">Net to receive</span>
-                <span className="tabular font-semibold">{formatMoney(403_104, "AED")}</span>
+                <span className="tabular font-semibold">{formatMoney(data.financingPreview.net, "AED")}</span>
               </div>
             </div>
-            <Button className="w-full">Submit request</Button>
+            <Button className="w-full" onClick={() => financing.mutate()}>
+              Submit request
+            </Button>
           </div>
         </SectionCard>
       </div>
 
-      <SectionCard
-        title="Receivables marketplace"
-        description="Tokenized invoices available for funding"
-      >
+      <SectionCard title="Receivables marketplace" description="Tokenized invoices available for funding">
         <div className="-m-5 overflow-auto">
           <table className="w-full text-sm">
             <thead className="text-[11px] uppercase text-muted-foreground tracking-wider">
@@ -155,7 +156,7 @@ function TradeFinance() {
               </tr>
             </thead>
             <tbody>
-              {receivables.map((r) => (
+              {data.receivables.map((r) => (
                 <tr key={r.id} className="border-b border-border/60 hover:bg-surface-elevated">
                   <td className="px-5 py-3 font-mono text-[12px]">{r.id}</td>
                   <td className="px-3 py-3">{r.buyer}</td>

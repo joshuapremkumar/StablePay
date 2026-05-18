@@ -1,15 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KpiCard, PageHeader, SectionCard, StatusPill } from "@/components/finara/Primitives";
 import { AllocationDonut, CashFlowChart } from "@/components/finara/Charts";
-import {
-  aiAlerts,
-  allocation,
-  cashflow,
-  formatMoney,
-  kpis,
-  settlements,
-  upcomingPayables,
-} from "@/lib/mock";
+import { formatMoney } from "@/lib/mock";
+import { demoApi } from "@/lib/demo";
 import {
   Banknote,
   Coins,
@@ -24,13 +18,46 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/dashboard")({
-  head: () => ({ meta: [{ title: "Executive Dashboard · Finara OS" }] }),
+  head: () => ({ meta: [{ title: "Executive Dashboard - Finara OS" }] }),
   component: Dashboard,
 });
 
 function Dashboard() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["demo", "dashboard"],
+    queryFn: demoApi.getDashboard,
+  });
+
+  const action = useMutation({
+    mutationFn: async (kind: "payment" | "payout" | "financing") => {
+      if (kind === "payment") return demoApi.simulatePayment();
+      if (kind === "payout") return demoApi.createPayout();
+      return demoApi.requestFinancing();
+    },
+    onSuccess: async (_, kind) => {
+      await queryClient.invalidateQueries({ queryKey: ["demo"] });
+      toast.success(
+        kind === "payment"
+          ? "Simulated a settled merchant payment."
+          : kind === "payout"
+            ? "Simulated a supplier payout."
+            : "Simulated a trade financing event.",
+      );
+    },
+  });
+
+  if (isLoading) {
+    return <div className="p-6 md:p-8">Loading dashboard simulation...</div>;
+  }
+
+  if (error || !data) {
+    return <div className="p-6 md:p-8">Unable to load the dashboard simulation.</div>;
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
       <PageHeader
@@ -38,10 +65,15 @@ function Dashboard() {
         description="Here's a unified view of treasury, payables, and merchant operations across all entities."
         actions={
           <>
-            <Button variant="outline" size="sm">
-              <ArrowRightLeft className="h-4 w-4 mr-1.5" /> Transfer
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => action.mutate("payment")}
+              disabled={action.isPending}
+            >
+              <ArrowRightLeft className="h-4 w-4 mr-1.5" /> Simulate settlement
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => action.mutate("payout")} disabled={action.isPending}>
               <Plus className="h-4 w-4 mr-1.5" /> Pay supplier
             </Button>
           </>
@@ -51,38 +83,38 @@ function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
           label="Treasury balance"
-          value={formatMoney(kpis.treasuryBalance, "AED")}
-          delta={kpis.momCashflow}
+          value={formatMoney(data.kpis.treasuryBalance, "AED")}
+          delta={data.kpis.momCashflow}
           icon={Wallet}
           hint="vs last month"
         />
         <KpiCard
           label="Stablecoin"
-          value={formatMoney(kpis.stablecoin, "USDC")}
+          value={formatMoney(data.kpis.stablecoin, "USDC")}
           delta={0.041}
           icon={Coins}
           hint="USDC reserve"
         />
         <KpiCard
           label="Fiat"
-          value={formatMoney(kpis.fiat, "AED")}
+          value={formatMoney(data.kpis.fiat, "AED")}
           delta={0.018}
           icon={Banknote}
           hint="across 3 currencies"
         />
         <KpiCard
           label="Net 30d cashflow"
-          value={formatMoney(kpis.receivables30d - kpis.payables30d, "AED")}
+          value={formatMoney(data.kpis.receivables30d - data.kpis.payables30d, "AED")}
           delta={0.092}
           icon={TrendingUp}
-          hint="receivables − payables"
+          hint="receivables - payables"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <SectionCard
           title="Cash flow"
-          description="Inflow vs outflow · last 90 days"
+          description="Inflow vs outflow / last 90 days"
           actions={
             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
@@ -97,25 +129,16 @@ function Dashboard() {
           }
           className="lg:col-span-2"
         >
-          <CashFlowChart data={cashflow} />
+          <CashFlowChart data={data.cashflow} />
         </SectionCard>
 
         <SectionCard title="Treasury allocation" description="Across currencies">
-          <AllocationDonut data={allocation} />
+          <AllocationDonut data={data.allocation} />
         </SectionCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <SectionCard
-          title="Upcoming payables"
-          description="Next 7 days"
-          className="lg:col-span-2"
-          actions={
-            <Button variant="ghost" size="sm">
-              View all
-            </Button>
-          }
-        >
+        <SectionCard title="Upcoming payables" description="Next 7 days" className="lg:col-span-2">
           <div className="-m-5 overflow-auto">
             <table className="w-full text-sm">
               <thead className="text-[11px] uppercase text-muted-foreground tracking-wider">
@@ -127,7 +150,7 @@ function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {upcomingPayables.map((p) => (
+                {data.upcomingPayables.map((p) => (
                   <tr key={p.id} className="border-b border-border/60 hover:bg-surface-elevated">
                     <td className="px-5 py-3">
                       <div className="font-medium">{p.vendor}</div>
@@ -153,7 +176,7 @@ function Dashboard() {
           actions={<Sparkles className="h-4 w-4 text-electric" />}
         >
           <div className="space-y-3">
-            {aiAlerts.map((a) => (
+            {data.aiAlerts.map((a) => (
               <div key={a.id} className="rounded-lg border border-border bg-surface-elevated p-3">
                 <div className="flex items-start gap-2">
                   {a.kind === "liquidity" && (
@@ -172,7 +195,7 @@ function Dashboard() {
                 </div>
               </div>
             ))}
-            <Button variant="outline" size="sm" className="w-full">
+            <Button variant="outline" size="sm" className="w-full" onClick={() => action.mutate("financing")}>
               Open Copilot
             </Button>
           </div>
@@ -182,7 +205,7 @@ function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SectionCard title="Recent merchant settlements" description="Today">
           <div className="space-y-2">
-            {settlements.map((s) => (
+            {data.settlements.map((s) => (
               <div
                 key={s.id}
                 className="flex items-center gap-3 py-2 border-b border-border/60 last:border-0"
@@ -208,14 +231,15 @@ function Dashboard() {
         <SectionCard title="Quick actions" description="Most-used CFO workflows">
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: Send, label: "Pay supplier", desc: "Single or batch" },
-              { icon: FileText, label: "Issue invoice", desc: "With payment link" },
-              { icon: ShieldAlert, label: "Smart LoC", desc: "Trade finance" },
-              { icon: ArrowRightLeft, label: "Treasury transfer", desc: "Across currencies" },
+              { icon: Send, label: "Pay supplier", desc: "Single or batch", kind: "payout" as const },
+              { icon: FileText, label: "Issue invoice", desc: "With payment link", kind: "payment" as const },
+              { icon: ShieldAlert, label: "Smart LoC", desc: "Trade finance", kind: "financing" as const },
+              { icon: ArrowRightLeft, label: "Treasury transfer", desc: "Across currencies", kind: "payment" as const },
             ].map((a) => (
               <button
                 key={a.label}
                 className="text-left p-4 rounded-lg border border-border bg-surface-elevated hover:border-primary/40 hover:bg-primary/5 transition-colors group"
+                onClick={() => action.mutate(a.kind)}
               >
                 <a.icon className="h-5 w-5 text-electric mb-3" />
                 <div className="text-sm font-medium">{a.label}</div>

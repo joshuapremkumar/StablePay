@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KpiCard, PageHeader, SectionCard, StatusPill } from "@/components/finara/Primitives";
-import { formatMoney, paymentLinks, transactions } from "@/lib/mock";
+import { formatMoney } from "@/lib/mock";
+import { demoApi } from "@/lib/demo";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -13,13 +15,44 @@ import {
   BarChart3,
   Wallet,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/payments")({
-  head: () => ({ meta: [{ title: "Merchant Payments · Finara OS" }] }),
+  head: () => ({ meta: [{ title: "Merchant Payments - Finara OS" }] }),
   component: Payments,
 });
 
 function Payments() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["demo", "payments"],
+    queryFn: demoApi.getPayments,
+  });
+
+  const createLink = useMutation({
+    mutationFn: demoApi.createPaymentLink,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["demo"] });
+      toast.success("Created a simulated payment link.");
+    },
+  });
+
+  const settlePayment = useMutation({
+    mutationFn: demoApi.simulatePayment,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["demo"] });
+      toast.success("Simulated a settled payment and treasury update.");
+    },
+  });
+
+  if (isLoading) {
+    return <div className="p-6 md:p-8">Loading payments simulation...</div>;
+  }
+
+  if (error || !data) {
+    return <div className="p-6 md:p-8">Unable to load the payments simulation.</div>;
+  }
+
   return (
     <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
       <PageHeader
@@ -27,10 +60,10 @@ function Payments() {
         description="Accept payments across cards, bank rails, QR, and stablecoins. Settle to any treasury account."
         actions={
           <>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-1.5" /> Export
+            <Button variant="outline" size="sm" onClick={() => settlePayment.mutate()}>
+              <Download className="h-4 w-4 mr-1.5" /> Simulate settlement
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => createLink.mutate()}>
               <Plus className="h-4 w-4 mr-1.5" /> New payment link
             </Button>
           </>
@@ -38,25 +71,10 @@ function Payments() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <KpiCard
-          label="Today's volume"
-          value={formatMoney(248_320, "AED")}
-          delta={0.124}
-          icon={BarChart3}
-        />
-        <KpiCard
-          label="Settled (7d)"
-          value={formatMoney(1_842_900, "AED")}
-          delta={0.083}
-          icon={CreditCard}
-        />
-        <KpiCard
-          label="Pending"
-          value={formatMoney(64_120, "AED")}
-          delta={-0.021}
-          icon={RefreshCcw}
-        />
-        <KpiCard label="Avg ticket" value={formatMoney(842, "AED")} delta={0.034} icon={Wallet} />
+        <KpiCard label="Today's volume" value={formatMoney(data.kpis.todaysVolume, "AED")} delta={0.124} icon={BarChart3} />
+        <KpiCard label="Settled (7d)" value={formatMoney(data.kpis.settled7d, "AED")} delta={0.083} icon={CreditCard} />
+        <KpiCard label="Pending" value={formatMoney(data.kpis.pending, "AED")} delta={-0.021} icon={RefreshCcw} />
+        <KpiCard label="Avg ticket" value={formatMoney(data.kpis.avgTicket, "AED")} delta={0.034} icon={Wallet} />
       </div>
 
       <Tabs defaultValue="links" className="space-y-4">
@@ -89,7 +107,7 @@ function Payments() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paymentLinks.map((p) => (
+                  {data.paymentLinks.map((p) => (
                     <tr key={p.id} className="border-b border-border/60 hover:bg-surface-elevated">
                       <td className="px-5 py-3">
                         <div className="font-medium">{p.name}</div>
@@ -144,7 +162,9 @@ function Payments() {
                     className="mt-1 w-full h-9 px-3 rounded-md border border-border bg-surface-elevated text-sm"
                   />
                 </div>
-                <Button className="w-full">Generate QR</Button>
+                <Button className="w-full" onClick={() => createLink.mutate()}>
+                  Generate QR
+                </Button>
               </div>
             </SectionCard>
             <SectionCard title="Preview">
@@ -157,7 +177,7 @@ function Payments() {
                         className="h-3 w-3 rounded-[2px]"
                         style={{
                           background:
-                            Math.random() > 0.45 ? "var(--color-foreground)" : "transparent",
+                            i % 3 === 0 || i % 5 === 0 ? "var(--color-foreground)" : "transparent",
                         }}
                       />
                     ))}
@@ -165,7 +185,7 @@ function Payments() {
                 </div>
                 <div className="mt-4 text-sm font-medium tabular">AED 1,240.00</div>
                 <div className="text-[11px] text-muted-foreground">
-                  ORDER-22841 · expires in 10 min
+                  ORDER-22841 / expires in 10 min
                 </div>
               </div>
             </SectionCard>
@@ -173,7 +193,7 @@ function Payments() {
         </TabsContent>
 
         <TabsContent value="txn">
-          <SectionCard title="Transactions" description="Last 30 days · all rails">
+          <SectionCard title="Transactions" description="Last 30 days / all rails">
             <div className="-m-5 overflow-auto">
               <table className="w-full text-sm">
                 <thead className="text-[11px] uppercase text-muted-foreground tracking-wider">
@@ -187,7 +207,7 @@ function Payments() {
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((t) => (
+                  {data.transactions.map((t) => (
                     <tr key={t.id} className="border-b border-border/60 hover:bg-surface-elevated">
                       <td className="px-5 py-3 font-mono text-[12px]">{t.id}</td>
                       <td className="px-3 py-3">{t.customer}</td>
@@ -208,10 +228,19 @@ function Payments() {
         </TabsContent>
 
         <TabsContent value="refunds">
-          <SectionCard title="Refunds" description="No active refund requests">
+          <SectionCard
+            title="Refunds"
+            description={
+              data.refunds.length
+                ? `Showing ${data.refunds.length} simulated refund records`
+                : "No active refund requests"
+            }
+          >
             <div className="py-12 text-center text-sm text-muted-foreground">
               <RefreshCcw className="h-8 w-8 mx-auto mb-3 text-muted-foreground/60" />
-              All transactions settled cleanly in the last 30 days.
+              {data.refunds.length
+                ? "Refund simulation data is available through the transaction timeline."
+                : "All transactions settled cleanly in the last 30 days."}
             </div>
           </SectionCard>
         </TabsContent>

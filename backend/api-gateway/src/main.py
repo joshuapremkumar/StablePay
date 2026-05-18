@@ -16,6 +16,7 @@ from src.routes.trade import router as trade_router
 from src.routes.compliance import router as compliance_router
 from src.routes.scoring import router as scoring_router
 from src.routes.integrations import router as integrations_router
+from src.routes.demo import router as demo_router
 
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger(__name__)
@@ -56,3 +57,4 @@ app.include_router(trade_router, prefix="/api/v1/trade", tags=["Trade Finance"])
 app.include_router(compliance_router, prefix="/api/v1/compliance", tags=["Compliance"])
 app.include_router(scoring_router, prefix="/api/v1/scoring", tags=["AI Scoring"])
 app.include_router(integrations_router, prefix="/api/v1/integrations", tags=["Integrations"])
+app.include_router(demo_router, prefix="/api/v1/demo", tags=["Demo"])
